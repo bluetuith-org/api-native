@@ -85,6 +85,8 @@ func (o *Obex) watchObexSystemBus() {
 
 // parseSignalData parses OBEX DBus signal data.
 func (o *Obex) parseSignalData(signal *dbus.Signal) {
+	// BUG: Handle session and transfer interfaces when files are received.
+	// BUG: dbh.DbusSignalPropertyAddedIface unhandled.
 	switch signal.Name {
 	case dbh.DbusSignalPropertyChangedIface:
 		objectInterfaceName, ok := signal.Body[0].(string)

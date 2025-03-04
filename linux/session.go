@@ -106,7 +106,7 @@ func (b *BluezSession) Start(
 		b.netman = netman
 	}
 
-	capabilities |= obexcap | netcap
+	capabilities.Add(obexcap, netcap)
 
 	return ac.NewFeatureSet(capabilities, ce), nil
 }
@@ -343,7 +343,7 @@ func (b *BluezSession) parseSignalData(signal *dbus.Signal) {
 			case dbh.BluezAdapterIface:
 				var adapter bluetooth.AdapterData
 
-				if err := dbh.DecodeVariantMap(mergedPropertyMap, &adapter); err != nil {
+				if err := b.adapter(objectPath).convertAndStoreObjects(mergedPropertyMap); err != nil {
 					dbh.PublishSignalError(err, signal,
 						"Bluez event handler error",
 						"error_at", "padded-adapter-decode",
@@ -361,7 +361,7 @@ func (b *BluezSession) parseSignalData(signal *dbus.Signal) {
 			case dbh.BluezDeviceIface:
 				var device bluetooth.DeviceData
 
-				if err := dbh.DecodeVariantMap(mergedPropertyMap, &device); err != nil {
+				if err := b.device(objectPath).convertAndStoreObjects(mergedPropertyMap); err != nil {
 					dbh.PublishSignalError(err, signal,
 						"Bluez event handler error",
 						"error_at", "padded-device-decode",

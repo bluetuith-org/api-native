@@ -24,7 +24,7 @@ type resolver struct {
 	decoder *codec.Decoder
 	data    []byte
 
-	lock sync.Mutex
+	sync.Mutex
 }
 
 var variantDecoder resolver
@@ -48,12 +48,14 @@ func DecodeVariantMap(
 	variants map[string]dbus.Variant, data interface{},
 	checkProps ...string,
 ) error {
-	variantDecoder.lock.Lock()
-	defer variantDecoder.lock.Unlock()
+	variantDecoder.Lock()
+	defer variantDecoder.Unlock()
 
 	if !variantDecoder.check {
 		handle := codec.JsonHandle{}
+		handle.TypeInfos = codec.NewTypeInfos([]string{"codec"})
 		handle.SetInterfaceExt(reflect.TypeOf(dbus.Variant{}), 1, variantExt{})
+
 		variantDecoder.encoder = codec.NewEncoderBytes(&variantDecoder.data, &handle)
 		variantDecoder.decoder = codec.NewDecoderBytes(variantDecoder.data, &handle)
 
