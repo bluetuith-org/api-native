@@ -5,7 +5,8 @@ import "runtime"
 type BluetoothStack string
 
 const (
-	BluezStack BluetoothStack = "BlueZ (DBus)"
+	BluezStack              BluetoothStack = "BlueZ (DBus)"
+	MicrosoftBluetoothStack BluetoothStack = "Microsoft"
 )
 
 // PlatformInfo describes platform-specific information.
