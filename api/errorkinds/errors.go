@@ -6,6 +6,7 @@ import "errors"
 var (
 	ErrSessionStart    = errors.New("cannot start session")
 	ErrSessionStop     = errors.New("cannot stop session")
+	ErrSessionNotExist = errors.New("session does not exist")
 	ErrMethodCall      = errors.New("cannot call method")
 	ErrMethodCanceled  = errors.New("method call was cancelled")
 	ErrInvalidAddress  = errors.New("invalid Bluetooth address")
@@ -22,6 +23,8 @@ var (
 
 	ErrPropertyDataParse = errors.New("error parsing property data")
 	ErrEventDataParse    = errors.New("error parsing event data")
+
+	ErrNotSupported = errors.New("this functionality is not supported")
 )
 
 // GenericError represents a standard error message.

@@ -120,11 +120,14 @@ func parseMacFromBuffer(b *bytes.Buffer) (MacAddress, error) {
 		}
 
 		var nibble byte
-		if c >= '0' && c <= '9' {
+		switch {
+		case c >= '0' && c <= '9':
 			nibble = c - '0' + 0x0
-		} else if c >= 'A' && c <= 'F' {
+		case c >= 'A' && c <= 'F':
 			nibble = c - 'A' + 0xA
-		} else {
+		case c >= 'a' && c <= 'f':
+			nibble = c - 'a' + 0xA
+		default:
 			return mac, errorkinds.ErrInvalidAddress
 		}
 

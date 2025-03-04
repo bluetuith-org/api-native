@@ -31,12 +31,13 @@ type Subscriber[T Events] struct {
 }
 
 // EventID represents a unique event ID.
-type EventID uint8
+type EventID byte
 
 // The different types of event IDs.
 const (
-	EventDefault EventID = iota // The zero value for this type.
+	EventNone EventID = iota // The zero value for this type.
 	EventError
+	EventAuthentication
 	EventAdapter
 	EventDevice
 	EventFileTransfer
@@ -44,31 +45,44 @@ const (
 )
 
 // EventAction describes an action that is associated with an event.
-type EventAction string
+type EventAction byte
 
 // The different types of event actions.
 const (
-	EventActionNone    EventAction = "none"
-	EventActionUpdated EventAction = "updated"
-	EventActionAdded   EventAction = "added"
-	EventActionRemoved EventAction = "removed"
+	EventActionNone EventAction = iota
+	EventActionAdded
+	EventActionUpdated
+	EventActionRemoved
 )
 
 // eventNames holds names of different events.
 var (
 	eventNames = map[EventID]string{
-		EventDefault:      "*",
-		EventError:        "error",
-		EventAdapter:      "adapter",
-		EventDevice:       "device",
-		EventFileTransfer: "filetransfer",
-		EventMediaPlayer:  "mediaplayer",
+		EventNone:           "",
+		EventError:          "error_event",
+		EventAuthentication: "authentication_event",
+		EventAdapter:        "adapter_event",
+		EventDevice:         "device_event",
+		EventFileTransfer:   "file_transfer_event",
+		EventMediaPlayer:    "media_player_event",
+	}
+
+	eventActions = map[EventAction]string{
+		EventActionNone:    "none",
+		EventActionUpdated: "updated",
+		EventActionAdded:   "added",
+		EventActionRemoved: "removed",
 	}
 )
 
 // String returns the name of the event ID.
 func (e EventID) String() string {
 	return eventNames[e]
+}
+
+// String returns the name of the event ID.
+func (e EventAction) String() string {
+	return eventActions[e]
 }
 
 // Value returns the event ID.

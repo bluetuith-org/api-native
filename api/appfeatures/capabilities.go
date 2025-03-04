@@ -6,7 +6,7 @@ import (
 )
 
 // Features describes the features of an application.
-type Features uint8
+type Features uint
 
 // The different kinds of individual features.
 const (
@@ -37,8 +37,8 @@ type FeatureSet struct {
 	Errors    Errors
 }
 
-// featureMap holds a list of descriptions for each feature.
-var featureMap = map[Features]string{
+// FeatureMap holds a list of descriptions for each feature.
+var FeatureMap = map[Features]string{
 	FeatureConnection:  "Bluetooth Connection",
 	FeaturePairing:     "Bluetooth Pairing",
 	FeatureSendFile:    "OBEX Send Files",
@@ -67,7 +67,7 @@ func NewError(c Features, err error) *Error {
 func MergedFeatureSet() FeatureSet {
 	var features Features
 
-	for c := range featureMap {
+	for c := range FeatureMap {
 		features |= c
 	}
 
@@ -93,12 +93,25 @@ func (c Features) Remove(features ...Features) {
 	}
 }
 
+// AbsentFeatures returns a list of features that are not present in the existing features.
+func (c Features) AbsentFeatures() []Features {
+	s := make([]Features, 0, len(FeatureMap))
+
+	for feature := range FeatureMap {
+		if c&feature == 0 {
+			s = append(s, feature)
+		}
+	}
+
+	return s
+}
+
 // String converts a set of features to a comma-separated string of
 // their respective descriptions.
 func (c Features) String() string {
-	s := make([]string, 0, len(featureMap))
+	s := make([]string, 0, len(FeatureMap))
 
-	for feature, title := range featureMap {
+	for feature, title := range FeatureMap {
 		if c&feature != 0 {
 			s = append(s, title)
 		}
@@ -109,9 +122,9 @@ func (c Features) String() string {
 
 // Slice returns a slice of individual app features.
 func (c Features) Slice() []Features {
-	s := make([]Features, 0, len(featureMap))
+	s := make([]Features, 0, len(FeatureMap))
 
-	for feature := range featureMap {
+	for feature := range FeatureMap {
 		if c&feature != 0 {
 			s = append(s, feature)
 		}

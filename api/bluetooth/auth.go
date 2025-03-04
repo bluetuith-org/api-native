@@ -20,6 +20,13 @@ type AuthTimeout struct {
 	cancel context.CancelFunc
 }
 
+// AuthEvent describes an authentication event.
+// This is not applicable to Linux, since authentication events are
+// emitted from the shim only.
+type AuthEvent struct {
+	AuthId int
+}
+
 // NewAuthTimeout returns a new authentication timeout token.
 func NewAuthTimeout(timeout time.Duration) AuthTimeout {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
