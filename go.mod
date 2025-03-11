@@ -8,6 +8,6 @@ require (
 	github.com/cskr/pubsub/v2 v2.0.2
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
-	github.com/puzpuzpuz/xsync/v3 v3.4.0
+	github.com/puzpuzpuz/xsync/v3 v3.5.1
 	github.com/ugorji/go/codec v1.2.12
 )
