@@ -82,5 +82,5 @@ type FileTransferEventData struct {
 // AuthorizeReceiveFile describes an authentication interface, which is used
 // to authorize a file transfer being received, before starting the transfer.
 type AuthorizeReceiveFile interface {
-	AuthorizeTransfer(timeout AuthTimeout, path string, props FileTransferData) error
+	AuthorizeTransfer(timeout AuthTimeout, props FileTransferData) error
 }

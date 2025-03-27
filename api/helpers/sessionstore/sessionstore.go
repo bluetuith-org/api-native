@@ -10,11 +10,11 @@ import (
 	"github.com/puzpuzpuz/xsync/v3"
 )
 
-// MergeAdapterDataFunc describes a function to merge old adapter data 
+// MergeAdapterDataFunc describes a function to merge old adapter data
 // with updated adapter data.
 type MergeAdapterDataFunc func(*bluetooth.AdapterData) error
 
-// MergeDeviceDataFunc describes a function to merge old device data 
+// MergeDeviceDataFunc describes a function to merge old device data
 // with updated device data.
 type MergeDeviceDataFunc func(*bluetooth.DeviceData) error
 

@@ -7,7 +7,7 @@ import (
 
 // Events defines a set of possible event data types.
 type Events interface {
-	errorkinds.GenericError | AdapterEventData | DeviceEventData | MediaEventData | FileTransferEventData
+	errorkinds.GenericError | AdapterEventData | DeviceEventData | MediaEventData | FileTransferEventData | AuthEventData
 }
 
 // Event represents a general event.
@@ -37,34 +37,33 @@ type EventID byte
 const (
 	EventNone EventID = iota // The zero value for this type.
 	EventError
-	EventAuthentication
 	EventAdapter
 	EventDevice
 	EventFileTransfer
 	EventMediaPlayer
+	EventAuthentication
 )
 
 // EventAction describes an action that is associated with an event.
-type EventAction byte
+type EventAction string
 
 // The different types of event actions.
 const (
-	EventActionNone EventAction = iota
-	EventActionAdded
-	EventActionUpdated
-	EventActionRemoved
+	EventActionNone    EventAction = "none"
+	EventActionUpdated EventAction = "updated"
+	EventActionAdded   EventAction = "added"
+	EventActionRemoved EventAction = "removed"
 )
 
 // eventNames holds names of different events.
 var (
 	eventNames = map[EventID]string{
-		EventNone:           "",
-		EventError:          "error_event",
-		EventAuthentication: "authentication_event",
-		EventAdapter:        "adapter_event",
-		EventDevice:         "device_event",
-		EventFileTransfer:   "file_transfer_event",
-		EventMediaPlayer:    "media_player_event",
+		EventNone:         "",
+		EventError:        "error_event",
+		EventAdapter:      "adapter_event",
+		EventDevice:       "device_event",
+		EventFileTransfer: "file_transfer_event",
+		EventMediaPlayer:  "media_player_event",
 	}
 
 	eventActions = map[EventAction]string{
@@ -90,9 +89,14 @@ func (e EventID) Value() uint {
 	return uint(e)
 }
 
-// Publish publishes the event to the event stream.
-func (e Event[T]) Publish(data T) {
+// PublishData publishes the event to the event stream with the provided data.
+func (e Event[T]) PublishData(data T) {
 	e.Data = data
+	eventbus.Publish(e.ID, e)
+}
+
+// Publish publishes the event to the event stream as-is.
+func (e Event[T]) Publish() {
 	eventbus.Publish(e.ID, e)
 }
 
@@ -167,6 +171,11 @@ func FileTransferEvent(action ...EventAction) Event[FileTransferEventData] {
 }
 
 // ErrorEvent returns an event interface to publish/subscribe to error events.
-func ErrorEvent() Event[errorkinds.GenericError] {
-	return Event[errorkinds.GenericError]{ID: EventError, Action: EventActionAdded}
+func ErrorEvent(err ...error) Event[errorkinds.GenericError] {
+	ev := Event[errorkinds.GenericError]{ID: EventError, Action: EventActionAdded}
+	if err != nil {
+		ev.Data = errorkinds.GenericError{Errors: err[0]}
+	}
+
+	return ev
 }

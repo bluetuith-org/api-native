@@ -9,6 +9,8 @@ var (
 	ErrSessionNotExist = errors.New("session does not exist")
 	ErrMethodCall      = errors.New("cannot call method")
 	ErrMethodCanceled  = errors.New("method call was cancelled")
+	ErrMethodTimeout   = errors.New("timeout on method response")
+
 	ErrInvalidAddress  = errors.New("invalid Bluetooth address")
 	ErrAdapterNotFound = errors.New("adapter not found")
 	ErrDeviceNotFound  = errors.New("device not found")
