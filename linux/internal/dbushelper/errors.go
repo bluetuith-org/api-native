@@ -16,20 +16,18 @@ import (
 
 // PublishSignalError publishes an error message with DBus signal data to the error event stream.
 func PublishSignalError(err error, signal *dbus.Signal, message string, metadata ...string) {
-	bluetooth.ErrorEvent().Publish(wrapSignalErrors(err, signal, message, metadata...))
+	bluetooth.ErrorEvent(wrapSignalErrors(err, signal, message, metadata...)).Publish()
 }
 
 // PublishError publishes an error to the error event stream.
 func PublishError(err error, message string, metadata ...string) {
-	bluetooth.ErrorEvent().Publish(
-		errorkinds.GenericError{
-			Errors: fault.Wrap(err,
-				fctx.With(context.Background(), metadata...),
-				ftag.With(ftag.Internal),
-				fmsg.With(message),
-			),
-		},
-	)
+	bluetooth.ErrorEvent(errorkinds.GenericError{
+		Errors: fault.Wrap(err,
+			fctx.With(context.Background(), metadata...),
+			ftag.With(ftag.Internal),
+			fmsg.With(message),
+		),
+	}).Publish()
 }
 
 // wrapSignalErrors returns an ErrorData after wrapping the provided error and signal related data.

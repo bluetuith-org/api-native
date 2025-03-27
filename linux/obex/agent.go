@@ -82,7 +82,7 @@ func (o *agent) AuthorizePush(transferPath dbus.ObjectPath) (string, *dbus.Error
 	o.ctx = bluetooth.NewAuthTimeout(o.authTimeout)
 	defer o.Cancel()
 
-	if err := o.authHandler.AuthorizeTransfer(o.ctx, path, transferProperty); err != nil {
+	if err := o.authHandler.AuthorizeTransfer(o.ctx, transferProperty); err != nil {
 		dbh.PublishError(err,
 			"OBEX agent error: Transfer was not authorized",
 			"error_at", "authpush-agent-authorize",
