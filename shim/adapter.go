@@ -27,7 +27,7 @@ func (a *adapter) StartDiscovery() error {
 		return err
 	}
 
-	_, _, err := commands.StartDiscovery(a.Address).ExecuteWith(a.s.executor)
+	_, err := commands.StartDiscovery(a.Address).ExecuteWith(a.s.executor)
 	if err != nil {
 		return fault.Wrap(err,
 			fctx.With(context.Background(),
@@ -49,7 +49,7 @@ func (a *adapter) StopDiscovery() error {
 		return err
 	}
 
-	_, _, err := commands.StopDiscovery(a.Address).ExecuteWith(a.s.executor)
+	_, err := commands.StopDiscovery(a.Address).ExecuteWith(a.s.executor)
 	if err != nil {
 		return fault.Wrap(err,
 			fctx.With(context.Background(),
@@ -70,7 +70,7 @@ func (a *adapter) SetPoweredState(enable bool) error {
 		return err
 	}
 
-	_, _, err := commands.SetPoweredState(a.Address, enable).ExecuteWith(a.s.executor)
+	_, err := commands.SetPoweredState(a.Address, enable).ExecuteWith(a.s.executor)
 	if err != nil {
 		return fault.Wrap(err,
 			fctx.With(context.Background(),
@@ -91,7 +91,7 @@ func (a *adapter) SetDiscoverableState(enable bool) error {
 		return err
 	}
 
-	_, _, err := commands.SetDiscoverableState(a.Address, enable).ExecuteWith(a.s.executor)
+	_, err := commands.SetDiscoverableState(a.Address, enable).ExecuteWith(a.s.executor)
 	if err != nil {
 		return fault.Wrap(err,
 			fctx.With(context.Background(),
@@ -112,7 +112,7 @@ func (a *adapter) SetPairableState(enable bool) error {
 		return err
 	}
 
-	_, _, err := commands.SetPairableState(a.Address, enable).ExecuteWith(a.s.executor)
+	_, err := commands.SetPairableState(a.Address, enable).ExecuteWith(a.s.executor)
 	if err != nil {
 		return fault.Wrap(err,
 			fctx.With(context.Background(),

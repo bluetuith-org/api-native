@@ -3,29 +3,34 @@
 package commands
 
 import (
-	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/bluetuith-org/api-native/api/appfeatures"
 	"github.com/bluetuith-org/api-native/api/bluetooth"
+	"github.com/bluetuith-org/api-native/api/errorkinds"
 	"github.com/bluetuith-org/api-native/shim/internal/serde"
 	"github.com/google/uuid"
 )
 
 // Session commands.
-func StartRpcServer(Socket string) *Command[NoResult] {
-	return (&Command[NoResult]{cmd: "rpc start-session"}).WithArgument(SocketArgument, Socket)
-}
-func StopRpcServer() *Command[NoResult] {
-	return &Command[NoResult]{cmd: "rpc stop-session"}
-}
 func GetFeatureFlags() *Command[appfeatures.Features] {
 	return &Command[appfeatures.Features]{cmd: "rpc feature-flags"}
 }
 func GetAdapters() *Command[[]bluetooth.AdapterData] {
 	return &Command[[]bluetooth.AdapterData]{cmd: "adapter list"}
 }
+func AuthenticationReply(id int, input string) *Command[NoResult] {
+	return (&Command[NoResult]{cmd: "rpc auth"}).WithArguments(func(am ArgumentMap) {
+		am[OperationIdArgument] = strconv.FormatInt(int64(id), 10)
+		am[ResponseArgument] = input
+	})
+}
 
 // Adapter commands.
+func AdapterProperties(Address bluetooth.MacAddress) *Command[bluetooth.AdapterData] {
+	return (&Command[bluetooth.AdapterData]{cmd: "adapter properties"}).WithArgument(AddressArgument, Address.String())
+}
 func GetPairedDevices(Address bluetooth.MacAddress) *Command[[]bluetooth.DeviceData] {
 	return (&Command[[]bluetooth.DeviceData]{cmd: "adapter get-paired-devices"}).WithArgument(AddressArgument, Address.String())
 }
@@ -48,13 +53,16 @@ func SetPoweredState(Address bluetooth.MacAddress, State bool) *Command[NoResult
 	})
 }
 func StartDiscovery(Address bluetooth.MacAddress) *Command[NoResult] {
-	return (&Command[NoResult]{cmd: "adapter start-discovery"}).WithArgument(AddressArgument, Address.String())
+	return (&Command[NoResult]{cmd: "adapter discovery start"}).WithArgument(AddressArgument, Address.String())
 }
 func StopDiscovery(Address bluetooth.MacAddress) *Command[NoResult] {
-	return (&Command[NoResult]{cmd: "adapter stop-discovery"}).WithArgument(AddressArgument, Address.String())
+	return (&Command[NoResult]{cmd: "adapter discovery stop"}).WithArgument(AddressArgument, Address.String())
 }
 
 // Device commands.
+func DeviceProperties(Address bluetooth.MacAddress) *Command[bluetooth.DeviceData] {
+	return (&Command[bluetooth.DeviceData]{cmd: "device properties"}).WithArgument(AddressArgument, Address.String())
+}
 func Pair(Address bluetooth.MacAddress) *Command[NoResult] {
 	return (&Command[NoResult]{cmd: "device pair"}).WithArgument(AddressArgument, Address.String())
 }
@@ -103,33 +111,47 @@ func ResumeTransfer(Address bluetooth.MacAddress) *Command[NoResult] {
 	return (&Command[NoResult]{cmd: "device opp resume-transfer"}).WithArgument(AddressArgument, Address.String())
 }
 
-func (c *Command[T]) ExecuteWith(fn ExecuteFunc) (T, CommandMetadata, error) {
+func (c *Command[T]) ExecuteWith(fn ExecuteFunc, timeoutSeconds ...int) (T, error) {
 	var result T
-	var metadata CommandMetadata
 
-	replyChan, err := fn(c.Slice()...)
-	if err != nil {
-		return result, metadata, err
+	var timeout = time.Duration(10)
+	if timeoutSeconds != nil {
+		timeout = time.Duration(timeoutSeconds[0])
 	}
 
-	for rawReply := range replyChan {
-		reply := CommandReply[T, Command[T]]{}
-		metadata = rawReply.CommandMetadata
-		if err := serde.UnmarshalJson(rawReply.RawData, &reply); err != nil {
-			fmt.Println(err)
-			return result, metadata, err
+	responseChan, commandErr := fn(c.Slice())
+	if commandErr != nil {
+		return result, commandErr
+	}
+
+	commandErr = errorkinds.ErrSessionStop
+
+	select {
+	case response, ok := <-responseChan:
+		if !ok {
+			break
 		}
 
-		if reply.Status == "error" {
-			return result, metadata, reply.Error
+		if response.Status == "error" {
+			return result, response.Error
 		}
 
-		if reply.Status == "ok" && reply.Data != nil {
-			for _, mv := range reply.Data {
+		if response.Status == "ok" {
+			reply := make(map[string]T, 1)
+			if err := serde.UnmarshalJson(response.Data, &reply); err != nil {
+				return result, err
+			}
+
+			for _, mv := range reply {
 				result = mv
 			}
+
+			commandErr = nil
 		}
+
+	case <-time.After(timeout * time.Second):
+		commandErr = errorkinds.ErrMethodTimeout
 	}
 
-	return result, metadata, nil
+	return result, commandErr
 }

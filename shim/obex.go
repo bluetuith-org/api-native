@@ -39,7 +39,7 @@ func (o *obexFileTransfer) CreateSession(ctx context.Context) error {
 		return err
 	}
 
-	_, _, err := commands.CreateSession(o.Address).ExecuteWith(o.s.executor)
+	_, err := commands.CreateSession(o.Address).ExecuteWith(o.s.executor)
 	return err
 }
 
@@ -49,7 +49,7 @@ func (o *obexFileTransfer) RemoveSession() error {
 		return err
 	}
 
-	_, _, err := commands.RemoveSession().ExecuteWith(o.s.executor)
+	_, err := commands.RemoveSession().ExecuteWith(o.s.executor)
 	return err
 }
 
@@ -59,7 +59,7 @@ func (o *obexFileTransfer) SendFile(filepath string) (bluetooth.FileTransferData
 		return bluetooth.FileTransferData{}, err
 	}
 
-	filetransfer, _, err := commands.SendFile(filepath).ExecuteWith(o.s.executor)
+	filetransfer, err := commands.SendFile(filepath).ExecuteWith(o.s.executor)
 	return filetransfer, err
 }
 
@@ -69,7 +69,7 @@ func (o *obexFileTransfer) CancelTransfer() error {
 		return err
 	}
 
-	_, _, err := commands.CancelTransfer(o.Address).ExecuteWith(o.s.executor)
+	_, err := commands.CancelTransfer(o.Address).ExecuteWith(o.s.executor)
 	return err
 }
 
@@ -79,7 +79,7 @@ func (o *obexFileTransfer) SuspendTransfer() error {
 		return err
 	}
 
-	_, _, err := commands.SuspendTransfer(o.Address).ExecuteWith(o.s.executor)
+	_, err := commands.SuspendTransfer(o.Address).ExecuteWith(o.s.executor)
 	return err
 }
 
@@ -89,7 +89,7 @@ func (o *obexFileTransfer) ResumeTransfer() error {
 		return err
 	}
 
-	_, _, err := commands.ResumeTransfer(o.Address).ExecuteWith(o.s.executor)
+	_, err := commands.ResumeTransfer(o.Address).ExecuteWith(o.s.executor)
 	return err
 }
 

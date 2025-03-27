@@ -4,13 +4,19 @@ package commands
 
 import (
 	"strings"
+	"time"
 
 	"github.com/ugorji/go/codec"
 )
 
-type ExecuteFunc func(params ...string) (chan CommandRawData, error)
+const CommandReplyTimeout = 10 * time.Second
+
+type ExecuteFunc func(params []string) (chan CommandResponse, error)
 type ArgumentMap = map[Argument]string
 type NoResult = struct{}
+
+type OperationID uint32
+type RequestID int64
 
 // T is the return value type of the command.
 // If T is of type NoResult, it means the command only returns errors, and no other values.
@@ -19,24 +25,13 @@ type Command[T any] struct {
 	argmap ArgumentMap
 }
 
-// 'T' is the return value type of the command.
-// If 'T' is of type NoResult, it means the command only returns errors, and no other values.
-// The Command[T] parameter 'C' is used to indicate that the 'T' value from Command[T] is mapped
-// to the 'T' value in CommandReply[T].
-type CommandReply[T any, C Command[T]] struct {
-	Status string       `json:"status"`
-	Data   map[string]T `json:"data"`
-	Error  CommandError `json:"error"`
-}
+type CommandResponse struct {
+	Status string `json:"status"`
 
-type CommandMetadata struct {
-	OperationId uint32
-	RequestId   int64
-}
-
-type CommandRawData struct {
-	CommandMetadata
-	RawData codec.Raw
+	OperationId OperationID  `json:"operation_id,omitempty"`
+	RequestId   RequestID    `json:"request_id,omitempty"`
+	Error       CommandError `json:"error"`
+	Data        codec.Raw    `json:"data"`
 }
 
 type CommandError struct {
@@ -102,9 +97,7 @@ func (c *Command[T]) WithArgument(arg Argument, value string) *Command[T] {
 		c.argmap = make(ArgumentMap)
 	}
 
-	if _, ok := c.argmap[arg]; ok {
-		c.argmap[arg] = value
-	}
+	c.argmap[arg] = value
 
 	return c
 }

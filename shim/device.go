@@ -22,33 +22,33 @@ type device struct {
 
 // Pair will attempt to pair a bluetooth device that is in pairing mode.
 func (d *device) Pair() error {
-	_, _, err := commands.Pair(d.Address).ExecuteWith(d.s.executor)
+	_, err := commands.Pair(d.Address).ExecuteWith(d.s.executor)
 	return err
 }
 
 // CancelPairing will cancel a pairing attempt.
 func (d *device) CancelPairing() error {
-	_, _, err := commands.CancelPairing(d.Address).ExecuteWith(d.s.executor)
+	_, err := commands.CancelPairing(d.Address).ExecuteWith(d.s.executor)
 	return err
 }
 
 // Connect will attempt to connect an already paired bluetooth device
 // to an device.
 func (d *device) Connect() error {
-	_, _, err := commands.Connect(d.Address).ExecuteWith(d.s.executor)
+	_, err := commands.Connect(d.Address).ExecuteWith(d.s.executor)
 	return err
 }
 
 // Disconnect will disconnect the bluetooth device from the device.
 func (d *device) Disconnect() error {
-	_, _, err := commands.Disconnect(d.Address).ExecuteWith(d.s.executor)
+	_, err := commands.Disconnect(d.Address).ExecuteWith(d.s.executor)
 	return err
 }
 
 // ConnectProfile will attempt to connect an already paired bluetooth device
 // to an device, using a specific Bluetooth profile UUID .
 func (d *device) ConnectProfile(profileUUID uuid.UUID) error {
-	_, _, err := commands.ConnectProfile(d.Address, profileUUID).ExecuteWith(d.s.executor)
+	_, err := commands.ConnectProfile(d.Address, profileUUID).ExecuteWith(d.s.executor)
 
 	return err
 }
@@ -56,14 +56,14 @@ func (d *device) ConnectProfile(profileUUID uuid.UUID) error {
 // DisconnectProfile will attempt to disconnect an already paired bluetooth device
 // to an device, using a specific Bluetooth profile UUID .
 func (d *device) DisconnectProfile(profileUUID uuid.UUID) error {
-	_, _, err := commands.DisconnectProfile(d.Address, profileUUID).ExecuteWith(d.s.executor)
+	_, err := commands.DisconnectProfile(d.Address, profileUUID).ExecuteWith(d.s.executor)
 
 	return err
 }
 
 // Remove removes a device from its associated device.
 func (d *device) Remove() error {
-	_, _, err := commands.Remove(d.Address).ExecuteWith(d.s.executor)
+	_, err := commands.Remove(d.Address).ExecuteWith(d.s.executor)
 	return err
 }
 

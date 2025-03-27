@@ -3,15 +3,15 @@
 package shim
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
-	"os/exec"
+	"path"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/Southclaws/fault"
 	"github.com/Southclaws/fault/fctx"
@@ -23,33 +23,31 @@ import (
 	"github.com/bluetuith-org/api-native/api/errorkinds"
 	sstore "github.com/bluetuith-org/api-native/api/helpers/sessionstore"
 	"github.com/bluetuith-org/api-native/shim/internal/commands"
+	"github.com/bluetuith-org/api-native/shim/internal/events"
 	"github.com/bluetuith-org/api-native/shim/internal/serde"
 	"github.com/puzpuzpuz/xsync/v3"
 )
 
 type ShimSession struct {
-	features ac.FeatureSet
+	features   ac.FeatureSet
+	authorizer bluetooth.SessionAuthorizer
 
 	conn net.Conn
 
-	listenerErrChan chan error
-	listenerEvents  chan []byte
-	sessionClosed   atomic.Bool
+	listenerEvents chan []byte
+	sessionClosed  atomic.Bool
 
 	cancel context.CancelFunc
 
 	id         *xsync.Counter
-	requestMap *xsync.MapOf[int64, chan commands.CommandRawData]
+	requestMap *xsync.MapOf[int64, chan commands.CommandResponse]
 
 	store sstore.SessionStore
 
 	sync.Mutex
 }
 
-const (
-	ShimInitErrTimeout  = 1 * time.Second
-	ShimCmdReplyTimeout = 5 * time.Second
-)
+const socketName = "bh-shim.sock"
 
 // Start attempts to initialize a session with the system's Bluetooth daemon or service.
 // Upon complete initialization, it returns the session descriptor, and capabilities of
@@ -67,58 +65,34 @@ func (s *ShimSession) Start(authHandler bluetooth.SessionAuthorizer, cfg config.
 	if authHandler == nil {
 		authHandler = bluetooth.DefaultAuthorizer{}
 	}
+	s.authorizer = authHandler
 
 	if cfg.SocketPath == "" {
-		t, err := os.CreateTemp("", "shim_sock_")
-		t.Close()
+		dir, err := os.UserCacheDir()
 		if err != nil {
 			return ac.NilFeatureSet(),
 				fault.Wrap(err,
-					fctx.With(context.Background(), "error_at", "create-socket"),
+					fctx.With(context.Background(), "error_at", "socket-dir"),
 					ftag.With(ftag.Internal),
-					fmsg.With("Cannot create socket file"),
+					fmsg.With("Cannot find socket directory"),
 				)
 		}
 
-		cfg.SocketPath = t.Name()
+		cfg.SocketPath = path.Join(dir, "bh-shim", socketName)
 	}
 
 	ctx := s.reset(false)
 
-	session := exec.CommandContext(
-		ctx, cfg.ShimPath,
-		commands.StartRpcServer(cfg.SocketPath).Slice()...,
-	)
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
-	if err := session.Start(); err != nil {
-		return ac.NilFeatureSet(),
-			fault.Wrap(err,
-				fctx.With(context.Background(), "error_at", "start-shim"),
-				ftag.With(ftag.Internal),
-				fmsg.With("Cannot start RPC session with shim"),
-			)
-	}
-
-	if err := s.waitForInitErrors(ctx, session); err != nil {
-		return ac.NilFeatureSet(),
-			fault.Wrap(err,
-				fctx.With(context.Background(), "error_at", "exec-shim"),
-				ftag.With(ftag.Internal),
-				fmsg.With("Shim process exited with errors"),
-			)
-	}
-
 	if err := s.startListener(ctx, cfg.SocketPath); err != nil {
 		return ac.NilFeatureSet(),
-			fault.Wrap(err,
+			fault.Wrap(errors.New(err.Error()),
 				fctx.With(context.Background(), "error_at", "listener-shim"),
 				ftag.With(ftag.Internal),
 				fmsg.With("Cannot start listener on provided socket"),
 			)
 	}
 
-	features, _, err := commands.GetFeatureFlags().ExecuteWith(s.executor)
+	features, err := commands.GetFeatureFlags().ExecuteWith(s.executor)
 	if err != nil {
 		return ac.NilFeatureSet(),
 			fault.Wrap(err,
@@ -153,13 +127,9 @@ func (s *ShimSession) Stop() error {
 		return errorkinds.ErrSessionNotExist
 	}
 
-	var err error
-	if s.conn != nil {
-		_, _, err = commands.StopRpcServer().ExecuteWith(s.executor)
-	}
 	s.reset(true)
 
-	return err
+	return nil
 }
 
 // Adapters returns a list of known adapters.
@@ -202,7 +172,7 @@ func (s *ShimSession) device() *device {
 }
 
 func (s *ShimSession) refreshStore() error {
-	adapters, _, err := commands.GetAdapters().ExecuteWith(s.executor)
+	adapters, err := commands.GetAdapters().ExecuteWith(s.executor)
 	if err != nil {
 		return err
 	}
@@ -214,7 +184,7 @@ func (s *ShimSession) refreshStore() error {
 		}
 		s.store.AddAdapter(newAdapter)
 
-		devices, _, err := commands.GetPairedDevices(adapter.Address).ExecuteWith(s.executor)
+		devices, err := commands.GetPairedDevices(adapter.Address).ExecuteWith(s.executor)
 		if err != nil {
 			return err
 		}
@@ -226,26 +196,6 @@ func (s *ShimSession) refreshStore() error {
 
 			s.store.AddDevice(newDevice)
 		}
-	}
-
-	return nil
-}
-
-func (s *ShimSession) waitForInitErrors(ctx context.Context, cmd *exec.Cmd) error {
-	go func() {
-		if err := cmd.Wait(); err != nil && ctx.Err() != nil {
-			s.Stop()
-		}
-	}()
-
-	select {
-	case err := <-s.listenerErrChan:
-		return err
-
-	case <-ctx.Done():
-		return errorkinds.ErrSessionNotExist
-
-	case <-time.NewTimer(ShimInitErrTimeout).C:
 	}
 
 	return nil
@@ -264,8 +214,10 @@ func (s *ShimSession) startListener(ctx context.Context, socketpath string) erro
 }
 
 func (s *ShimSession) listenForEvents(ctx context.Context) {
-	sendData := func(c chan commands.CommandRawData, m commands.CommandRawData) {
+	sendData := func(c chan commands.CommandResponse, m commands.CommandResponse) {
 		select {
+		case <-ctx.Done():
+			close(c)
 		case c <- m:
 			close(c)
 		default:
@@ -284,70 +236,162 @@ func (s *ShimSession) listenForEvents(ctx context.Context) {
 			return
 		}
 
-		replyHeader := commands.RawCommandHeaderBuffer{}
-		headerBytes, err := s.conn.Read(replyHeader[:])
-		if err != nil {
-			s.handleListenerError(err)
-			continue
-		}
-		if headerBytes != len(replyHeader) {
-			continue
-		}
+		scanner := bufio.NewScanner(s.conn)
+		scanner.Split(bufio.ScanLines)
 
-		header, err := commands.UnpackReplyHeader(replyHeader)
-		if err != nil {
-			s.handleListenerError(err)
-			continue
-		}
+		for scanner.Scan() {
+			var response struct {
+				commands.CommandResponse
+				events.ServerEvent
+			}
 
-		buf := make([]byte, header.ContentSize)
-		_, err = io.ReadFull(s.conn, buf)
-		if err != nil {
-			s.handleListenerError(err)
-			continue
-		}
+			if err := scanner.Err(); err != nil {
+				s.handleListenerError(err, true)
+			}
 
-		fmt.Println(string(buf))
+			if err := serde.UnmarshalJson(scanner.Bytes(), &response); err != nil {
+				s.handleListenerError(err, false)
+			}
 
-		if header.EventID > 0 {
-			s.handleListenerEvent(buf)
-			continue
-		}
+			if response.EventId > 0 {
+				go s.handleListenerEvent(response.ServerEvent)
+				continue
+			}
 
-		replyChan, ok := chan commands.CommandRawData(nil), false
-		if header.IsOperationComplete {
-			replyChan, ok = s.requestMap.LoadAndDelete(header.RequestId)
-		} else {
-			replyChan, ok = s.requestMap.Load(header.RequestId)
-		}
-
-		if ok {
-			sendData(replyChan, commands.CommandRawData{
-				CommandMetadata: commands.CommandMetadata{
-					OperationId: header.OperationId,
-					RequestId:   header.RequestId,
-				},
-				RawData: buf,
-			})
+			replyChan, ok := s.requestMap.LoadAndDelete(int64(response.RequestId))
+			if ok {
+				sendData(replyChan, response.CommandResponse)
+			}
 		}
 	}
 }
 
-func (s *ShimSession) handleListenerEvent(ev []byte) {
+func (s *ShimSession) handleListenerEvent(ev events.ServerEvent) {
+	switch ev.EventId {
+	case bluetooth.EventError:
+		errorEvent, err := events.UnmarshalEvent[errorkinds.GenericError](ev)
+		if err != nil {
+			bluetooth.ErrorEvent(err).Publish()
+			return
+		}
 
+		errorEvent.Publish()
+
+	case bluetooth.EventAuthentication:
+		authEvent, err := events.UnmarshalEvent[bluetooth.AuthEventData](ev)
+		if err != nil {
+			bluetooth.ErrorEvent(err).Publish()
+			return
+		}
+
+		authEvent.Data.CallAuthorizer(s.authorizer, func(authEvent bluetooth.AuthEventData, reply bluetooth.AuthReply, err error) {
+			var response string
+
+			if err == nil {
+				response = reply.Reply
+			}
+
+			_, err = commands.AuthenticationReply(authEvent.AuthID, response).ExecuteWith(s.executor, (authEvent.TimeoutMs/1000)*2)
+			if err != nil {
+				bluetooth.ErrorEvent(err).Publish()
+			}
+		})
+
+	case bluetooth.EventAdapter:
+		adapterEvent, err := events.UnmarshalEvent[bluetooth.AdapterEventData](ev)
+		if err != nil {
+			bluetooth.ErrorEvent(err).Publish()
+			return
+		}
+
+		adapterEvent.Publish()
+
+		switch adapterEvent.Action {
+		case bluetooth.EventActionAdded:
+			adapter, err := commands.AdapterProperties(adapterEvent.Data.Address).ExecuteWith(s.executor)
+			if err != nil {
+				bluetooth.ErrorEvent(err).Publish()
+				return
+			}
+
+			s.store.AddAdapter(adapter)
+
+		case bluetooth.EventActionUpdated:
+			s.store.UpdateAdapter(adapterEvent.Data.Address, func(dd *bluetooth.AdapterData) error {
+				dd.AdapterEventData = adapterEvent.Data
+				return nil
+			})
+
+		case bluetooth.EventActionRemoved:
+			s.store.RemoveAdapter(adapterEvent.Data.Address)
+		}
+
+	case bluetooth.EventDevice:
+		deviceEvent, err := events.UnmarshalEvent[bluetooth.DeviceEventData](ev)
+		if err != nil {
+			bluetooth.ErrorEvent(err).Publish()
+			return
+		}
+
+		deviceEvent.Publish()
+
+		switch deviceEvent.Action {
+		case bluetooth.EventActionAdded:
+			device, err := commands.DeviceProperties(deviceEvent.Data.Address).ExecuteWith(s.executor)
+			if err != nil {
+				bluetooth.ErrorEvent(err).Publish()
+				return
+			}
+
+			s.store.AddDevice(device)
+
+		case bluetooth.EventActionUpdated:
+			s.store.UpdateDevice(deviceEvent.Data.Address, func(dd *bluetooth.DeviceData) error {
+				dd.DeviceEventData = deviceEvent.Data
+				return nil
+			})
+
+		case bluetooth.EventActionRemoved:
+			s.store.RemoveDevice(deviceEvent.Data.Address)
+		}
+
+	case bluetooth.EventFileTransfer:
+		filetransferEvent, err := events.UnmarshalEvent[bluetooth.FileTransferEventData](ev)
+		if err != nil {
+			bluetooth.ErrorEvent(err).Publish()
+			return
+		}
+
+		filetransferEvent.Publish()
+
+	case bluetooth.EventMediaPlayer:
+		mediaplayerEvent, err := events.UnmarshalEvent[bluetooth.MediaEventData](ev)
+		if err != nil {
+			bluetooth.ErrorEvent(err).Publish()
+			return
+		}
+
+		mediaplayerEvent.Publish()
+	}
 }
 
-func (s *ShimSession) handleListenerError(err error) {
-
+func (s *ShimSession) handleListenerError(err error, stop bool) {
+	bluetooth.ErrorEvent(err).Publish()
+	if stop {
+		s.Stop()
+	}
 }
 
-func (s *ShimSession) executor(params ...string) (chan commands.CommandRawData, error) {
+func (s *ShimSession) executor(params []string) (chan commands.CommandResponse, error) {
 	if s.sessionClosed.Load() {
 		return nil, errorkinds.ErrSessionNotExist
 	}
 
+	s.Lock()
+	defer s.Unlock()
+
 	s.id.Inc()
-	replyChan := make(chan commands.CommandRawData, 1)
+	replyChan := make(chan commands.CommandResponse, 1)
 	s.requestMap.Store(s.id.Value(), replyChan)
 
 	command := map[string]any{
@@ -363,6 +407,10 @@ func (s *ShimSession) executor(params ...string) (chan commands.CommandRawData, 
 	if _, err = s.conn.Write(commandBytes); err != nil {
 		return nil, err
 	}
+	if _, err = s.conn.Write([]byte("\n")); err != nil {
+		return nil, err
+	}
+	fmt.Println(string(commandBytes))
 
 	return replyChan, nil
 }
@@ -375,21 +423,14 @@ func (s *ShimSession) reset(isClosed bool) context.Context {
 
 	s.sessionClosed.Store(isClosed)
 	if isClosed {
-		if s.cancel != nil {
-			s.cancel()
-		}
-
-		if s.conn != nil {
-			s.conn.Close()
-		}
+		s.cleanup()
 
 		return context.Background()
 	}
 
 	s.id = xsync.NewCounter()
-	s.requestMap = xsync.NewMapOf[int64, chan commands.CommandRawData]()
+	s.requestMap = xsync.NewMapOf[int64, chan commands.CommandResponse]()
 
-	s.listenerErrChan = make(chan error, 10)
 	s.listenerEvents = make(chan []byte, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -397,4 +438,14 @@ func (s *ShimSession) reset(isClosed bool) context.Context {
 	s.store = sstore.NewSessionStore()
 
 	return ctx
+}
+
+func (s *ShimSession) cleanup() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+
+	if s.conn != nil {
+		s.conn.Close()
+	}
 }
